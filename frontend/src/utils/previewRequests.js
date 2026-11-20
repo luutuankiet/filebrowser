@@ -1,5 +1,3 @@
-import { state } from "@/store";
-
 /**
  * Fetch a preview image and return an object URL for display.
  * Pass an AbortSignal so the caller can cancel (e.g. on navigation or unmount).
@@ -11,9 +9,9 @@ export async function fetchPreviewImage(url, signal) {
   const res = await fetch(url, {
     credentials: "same-origin",
     signal,
-    headers: {
-      sessionId: state.sessionId,
-    },
+    // Fork: no custom header. The preview endpoint does not read it, and the
+    // server may redirect to a bucket on another origin, where a custom
+    // header forces a CORS preflight per thumbnail.
   });
 
   if (res.status < 200 || res.status > 299) {
