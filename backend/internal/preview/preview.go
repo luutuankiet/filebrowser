@@ -19,6 +19,7 @@ import (
 	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/fs/fileutils"
 	"github.com/gtsteffaniak/filebrowser/backend/internal/ffmpeg"
 	"github.com/gtsteffaniak/filebrowser/backend/internal/imagemeta"
+	"github.com/gtsteffaniak/filebrowser/backend/internal/thumbstore"
 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
 	"github.com/gtsteffaniak/go-logger/logger"
@@ -208,7 +209,20 @@ func GetPreviewForFile(ctx context.Context, file iteminfo.ExtendedFileInfo, prev
 		}
 		return data, nil
 	}
-	return GeneratePreviewWithMD5(ctx, file, previewSize, url, seekPercentage, cacheHash)
+	// Fork: previews persisted in a bucket (internal/thumbstore); no-op when off.
+	storeKey := ""
+	if thumbstore.Enabled() && file.Path != "" && (file.Metadata == nil || len(file.Metadata.AlbumArt) == 0) {
+		storeKey = thumbstore.Key(file.Source, file.Path, file.Size, file.ModTime, previewSize, seekPercentage)
+		if data, ok := thumbstore.Get(ctx, storeKey); ok && len(data) >= minPreviewSize {
+			_ = service.fileCache.Store(ctx, cacheKey, data)
+			return data, nil
+		}
+	}
+	data, err := GeneratePreviewWithMD5(ctx, file, previewSize, url, seekPercentage, cacheHash)
+	if err == nil && storeKey != "" {
+		thumbstore.PutAsync(storeKey, data)
+	}
+	return data, err
 }
 
 // filePreviewType represents the type of preview generation needed

@@ -15,6 +15,7 @@ import (
 
 	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/fs/files"
 	"github.com/gtsteffaniak/filebrowser/backend/internal/preview"
+	"github.com/gtsteffaniak/filebrowser/backend/internal/thumbstore"
 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
 	"github.com/gtsteffaniak/filebrowser/backend/pkg/indexing/iteminfo"
 	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
@@ -267,6 +268,15 @@ func PreviewHelperFunc(w http.ResponseWriter, r *http.Request, d *Context) (int,
 	isImage := strings.HasPrefix(d.FileInfo.Type, "image")
 	ext := strings.ToLower(filepath.Ext(d.FileInfo.Name))
 	resizable := iteminfo.ResizableImageTypes[ext]
+
+	// Fork: a preview already in the bucket store goes to the browser by 302.
+	// This runs before the dimension check below, which opens the original
+	// and on a bucket mount downloads part of it. Small files skip it: they
+	// are served raw and never stored.
+	if thumbstore.Enabled() && d.FileInfo.OnlyOfficeId == "" && !(isImage && resizable && d.FileInfo.Size < 256*1024) &&
+		thumbstore.Redirect(w, r, thumbstore.Key(d.FileInfo.Source, d.FileInfo.Path, d.FileInfo.Size, d.FileInfo.ModTime, previewSize, seekPercentage)) {
+		return 0, nil
+	}
 
 	// For small displayable images (jpg, png, etc.) serve the original to avoid processing.
 	// Also serve the original when dimensions already fit the requested preview size.
