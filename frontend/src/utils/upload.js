@@ -2,6 +2,7 @@ import { reactive } from "vue";
 import { resourcesApi } from "@/api";
 import { mutations, state } from "@/store";
 import { getters } from "@/store/getters";
+import { tryDirectUpload } from "@/utils/directUpload";
 import { notify } from "@/notify";
 import i18n from "@/i18n";
 import {
@@ -511,6 +512,28 @@ class UploadManager {
     this.activeUploads++;
     this.hadActiveUploads = true; // Mark that we've had active uploads
     upload.status = "uploading";
+
+    // Direct S3 transfers (opt-in on the server): parts go straight to the bucket.
+    try {
+      if (await tryDirectUpload(upload, this)) {
+        this.clearProgressTimeout(upload.id);
+        upload.xhrPromise = null;
+        upload.status = "completed";
+        upload.progress = 100;
+        upload.connectionIssue = false;
+        notifyUploadComplete(upload);
+        this.activeUploads--;
+        void this.processQueue();
+        return;
+      }
+    } catch (err) {
+      this.clearProgressTimeout(upload.id);
+      upload.xhrPromise = null;
+      await this.handleUploadError(upload, err);
+      this.activeUploads--;
+      void this.processQueue();
+      return;
+    }
 
     // Default to 5 MB when unset; explicit 0 disables chunking (single-shot upload).
     const chunkSizeMb = state.user.fileLoading?.uploadChunkSizeMb ?? 5;

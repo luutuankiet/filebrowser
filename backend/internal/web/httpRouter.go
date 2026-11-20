@@ -60,6 +60,7 @@ func configureHTTPRouter(router, api, publicRoutes, publicApi *http.ServeMux) {
 	api.HandleFunc("GET /resources/items", withUser(itemsGetHandler))
 	api.HandleFunc("DELETE /resources", withUser(resourceDeleteHandler))
 	api.HandleFunc("POST /resources", withUser(ResourcePostHandler))
+	registerDirectTransferRoutes(api)
 	api.HandleFunc("PUT /resources", withUser(resourcePutHandler))
 	api.HandleFunc("PATCH /resources", withUser(ResourcePatchHandler))
 	api.HandleFunc("DELETE /resources/bulk", withUser(ResourceBulkDeleteHandler))

@@ -528,6 +528,11 @@ func ServeSingleFile(w http.ResponseWriter, r *http.Request, d *Context, source 
 		}
 	}
 
+	// Direct S3 transfers (opt-in): redirect to a presigned URL so the bytes skip this server.
+	if !isOnlyOffice && d.Share.MaxBandwidth == 0 && directDownload(w, r, realPath, displayFileName, opts.ForceInline) {
+		return http.StatusOK, nil
+	}
+
 	fd, err := os.Open(realPath)
 	if err != nil {
 		if isOnlyOffice && logContext != nil {
