@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gtsteffaniak/filebrowser/backend/internal/adapters/fs/fileutils"
 	"github.com/gtsteffaniak/filebrowser/backend/internal/utils"
@@ -358,6 +359,48 @@ func (idx *Index) SetFolderSize(path string, newSize uint64) {
 	defer idx.folderSizesMu.Unlock()
 	idx.folderSizes[path] = newSize
 	idx.folderSizesUnsynced[path] = struct{}{} // Mark as changed for next DB sync
+}
+
+// SetFolderModTime records a directory's own date (see Index.folderModTimes).
+func (idx *Index) SetFolderModTime(path string, modTime time.Time) {
+	idx.folderSizesMu.Lock()
+	defer idx.folderSizesMu.Unlock()
+	if idx.folderModTimes == nil {
+		idx.folderModTimes = make(map[string]time.Time)
+	}
+	idx.folderModTimes[path] = modTime
+}
+
+// GetFolderModTimeForDisplay returns the newer of statTime and the date recorded
+// for the directory when it was last listed or scanned.
+func (idx *Index) GetFolderModTimeForDisplay(path string, statTime time.Time) time.Time {
+	idx.folderSizesMu.RLock()
+	defer idx.folderSizesMu.RUnlock()
+	if stored, ok := idx.folderModTimes[path]; ok && stored.After(statTime) {
+		return stored
+	}
+	return statTime
+}
+
+// loadFolderStats fills the in-memory folder sizes and dates from the index database.
+func (idx *Index) loadFolderStats() {
+	sizes, modTimes, err := idx.db.LoadFolderStats(idx.Name)
+	if err != nil {
+		logger.Errorf("failed to load folder sizes for [%v]: %v", idx.Name, err)
+		return
+	}
+	idx.folderSizesMu.Lock()
+	defer idx.folderSizesMu.Unlock()
+	for path, size := range sizes {
+		idx.folderSizes[path] = size
+	}
+	if idx.folderModTimes == nil {
+		idx.folderModTimes = make(map[string]time.Time, len(modTimes))
+	}
+	for path, modTime := range modTimes {
+		idx.folderModTimes[path] = modTime
+	}
+	logger.Infof("loaded %d folder sizes from the index database for [%v]", len(sizes), idx.Name)
 }
 
 // GetFolderSize retrieves the size for a directory from the in-memory map

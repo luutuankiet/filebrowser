@@ -1087,6 +1087,28 @@ func (db *IndexDB) LoadFolderSizes(source string) (map[string]uint64, error) {
 	return folderSizes, rows.Err()
 }
 
+// LoadFolderStats loads every folder's size and date for a source from the database.
+func (db *IndexDB) LoadFolderStats(source string) (map[string]uint64, map[string]time.Time, error) {
+	rows, err := db.Query(`SELECT path, size, mod_time FROM index_items WHERE source = ? AND is_dir = 1`, source)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	sizes := make(map[string]uint64)
+	modTimes := make(map[string]time.Time)
+	for rows.Next() {
+		var path string
+		var size uint64
+		var modTime int64
+		if err := rows.Scan(&path, &size, &modTime); err != nil {
+			return nil, nil, err
+		}
+		sizes[path] = size
+		modTimes[path] = time.Unix(modTime, 0)
+	}
+	return sizes, modTimes, rows.Err()
+}
+
 // GetFilesBySizeAndType retrieves files matching both size and type.
 func (db *IndexDB) GetFilesBySizeAndType(source string, size int64, fileType string, pathPrefix string) ([]*iteminfo.FileInfo, error) {
 	var query string

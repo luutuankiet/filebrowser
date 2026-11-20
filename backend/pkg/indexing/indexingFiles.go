@@ -128,6 +128,9 @@ type Index struct {
 	folderSizes         map[string]uint64   // path -> size (in-memory only, calculated from children)
 	folderSizesUnsynced map[string]struct{} // Tracks which folder sizes have changed since last DB sync
 	folderSizesMu       sync.RWMutex        // Dedicated RWMutex allows concurrent reads, serializes writes
+	// path -> a folder's own date: the newer of its stat time and its newest child.
+	// Object stores report a placeholder date for folders, so the stat time alone is not real.
+	folderModTimes map[string]time.Time
 	// Scan session tracking: timestamp when scan session started (for timestamp-based conflict detection)
 	scanSessionStartTime int64           // Unix timestamp when current scan session started (0 if no active scan)
 	scanUpdatedPaths     map[string]bool // Tracks directories updated by the scan (to distinguish from API updates)
@@ -409,6 +412,12 @@ func Initialize(source *settings.Source, mock bool, isNewDb bool) {
 	}
 	indexes[newIndex.Name] = &newIndex
 	indexesMutex.Unlock()
+	// A reused index database (indexSqlConfig.disableReuse false) already holds
+	// every folder's size and date; load them so listings show them before the
+	// folder is opened or rescanned.
+	if !isNewDb && !mock {
+		newIndex.loadFolderStats()
+	}
 	if !newIndex.Config.ResolvedRules.IndexingDisabled {
 		logger.Infof("initializing index: [%v]", newIndex.Name)
 		// Start multi-scanner system (each scanner will do its own initial scan)
@@ -688,6 +697,7 @@ func (idx *Index) indexDirectory(indexPath string, opts Options, scanner *Scanne
 	// Always store the calculated directory size in the in-memory map
 	// This ensures parent directories are updated after copy/move operations
 	idx.SetFolderSize(indexPath, uint64(dirFileInfo.Size))
+	idx.SetFolderModTime(indexPath, dirFileInfo.ModTime)
 
 	return dirFileInfo.Size, dirFileInfo.HasPreview, nil
 }
@@ -855,12 +865,14 @@ func (idx *Index) processDirectoryItem(file os.FileInfo, indexPath string, subdi
 		}
 		itemInfo.Size = subdirSize
 		itemInfo.HasPreview = subdirHasPreview
+		itemInfo.ModTime = idx.GetFolderModTimeForDisplay(utils.AddTrailingSlashIfNotExists(dirPath), file.ModTime())
 		return itemInfo, itemInfo.Size, true
 	}
 
 	// Non-recursive: get folder size and hasPreview from cache
 	childIndexPath := utils.AddTrailingSlashIfNotExists(dirPath)
 	itemInfo.Size = idx.GetFolderSizeForDisplay(childIndexPath)
+	itemInfo.ModTime = idx.GetFolderModTimeForDisplay(childIndexPath, file.ModTime())
 
 	// Use batched hasPreview map if available
 	if !opts.SkipExtendedAttrs && subdirHasPreviewMap != nil {
@@ -941,6 +953,8 @@ func (idx *Index) GetDirInfoCore(dirInfo *os.File, stat os.FileInfo, indexPath s
 	dirInfos := []iteminfo.ItemInfo{}
 	processedCount := 0
 	hasPreview := false
+	// The folder's own date: the newest of its stat time and its children's dates.
+	modTime := stat.ModTime()
 
 	for _, file := range files {
 		subfileBaseName := file.Name()
@@ -990,6 +1004,9 @@ func (idx *Index) GetDirInfoCore(dirInfo *os.File, stat os.FileInfo, indexPath s
 				totalSize += size
 			}
 			dirInfos = append(dirInfos, *itemInfo)
+			if itemInfo.ModTime.After(modTime) {
+				modTime = itemInfo.ModTime
+			}
 			if opts.Recursive && opts.IsRoutineScan {
 				idx.incrementScannerDirs()
 			}
@@ -1002,6 +1019,9 @@ func (idx *Index) GetDirInfoCore(dirInfo *os.File, stat os.FileInfo, indexPath s
 				totalSize += size
 			}
 			fileInfos = append(fileInfos, iteminfo.ExtendedItemInfo{ItemInfo: *itemInfo})
+			if itemInfo.ModTime.After(modTime) {
+				modTime = itemInfo.ModTime
+			}
 			if opts.IsRoutineScan {
 				idx.incrementScannerFiles()
 			}
@@ -1038,7 +1058,7 @@ func (idx *Index) GetDirInfoCore(dirInfo *os.File, stat os.FileInfo, indexPath s
 		Name:       baseName,
 		Type:       "directory",
 		Size:       totalSize,
-		ModTime:    stat.ModTime(),
+		ModTime:    modTime,
 		HasPreview: hasPreview,
 	}
 	dirFileInfo.SortItems()
@@ -1133,6 +1153,7 @@ func (idx *Index) RefreshDirectory(indexPath string, recursive bool) error {
 		previousSize, exists := idx.folderSizes[indexPath]
 		delete(idx.folderSizes, indexPath)
 		delete(idx.folderSizesUnsynced, indexPath)
+		delete(idx.folderModTimes, indexPath)
 		idx.folderSizesMu.Unlock()
 
 		if exists && previousSize > 0 {
