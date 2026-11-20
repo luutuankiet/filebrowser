@@ -121,6 +121,7 @@ type cliRoot struct {
 	Init    initCmd    `cmd:"" name:"init" hidden:"" help:"Initialize the database or migrate from a legacy database"`
 	Set     SetCmd     `cmd:"" name:"set" help:"Set configuration values (deprecated: use 'user set' for users)"`
 	User    UserCmd    `cmd:"" name:"user" help:"User management"`
+	Thumbs  ThumbsCmd  `cmd:"" name:"thumbs" help:"Fill the bucket preview store for a source (fork; needs FB_THUMBSTORE_*)"`
 }
 
 func (versionCmd) Run() error {
