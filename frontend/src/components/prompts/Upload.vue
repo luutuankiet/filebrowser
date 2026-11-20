@@ -10,7 +10,7 @@
               <HelpTooltipIcon :text="$t('fileLoading.maxConcurrentUploadHelp')" />
             </div>
             <div>
-              <input v-model.number="maxConcurrentUpload" type="range" min="1" max="10" @change="updateUploadSettings" />
+              <input v-model.number="maxConcurrentUpload" type="range" min="1" max="50" @change="updateUploadSettings" />
               <span class="range-value">{{ maxConcurrentUpload }}</span>
             </div>
           </div>

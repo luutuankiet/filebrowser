@@ -22,6 +22,7 @@ vi.mock("@/store/getters", () => ({ getters: { isShare: vi.fn(() => false) } }))
 vi.mock("@/utils/appNotifications", () => ({
   notifyUploadComplete: vi.fn(),
   notifyUploadError: vi.fn(),
+  formatNotificationCount: vi.fn(),
 }));
 
 import { resourcesApi } from "@/api";
@@ -433,5 +434,22 @@ describe("hasOngoingUploads", () => {
     uploadManager.clearCompleted();
     expect(mutations.setIsUploading).toHaveBeenCalledWith(false);
     state.user.fileLoading.clearAll = false;
+  });
+});
+
+describe("upload concurrency", () => {
+  it("starts up to 50 uploads at once when the user allows 50", async () => {
+    state.user.fileLoading.maxConcurrentUpload = 50;
+    for (let i = 0; i < 60; i++) addUpload("pending");
+    const start = vi.spyOn(uploadManager, "start").mockImplementation((id) => {
+      uploadManager.queue.find((item) => item.id === id).status = "uploading";
+      uploadManager.activeUploads++;
+    });
+
+    await uploadManager.processQueue();
+
+    expect(start).toHaveBeenCalledTimes(50);
+    expect(uploadManager.queue.filter((item) => item.status === "pending")).toHaveLength(10);
+    state.user.fileLoading.maxConcurrentUpload = 10;
   });
 });

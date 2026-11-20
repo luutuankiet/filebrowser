@@ -435,7 +435,7 @@ class UploadManager {
       return;
     }
 
-    const maxConcurrent = state.user.fileLoading?.maxConcurrentUpload || 3;
+    const maxConcurrent = state.user.fileLoading?.maxConcurrentUpload || 50;
     while (
       this.activeUploads < maxConcurrent &&
       this.hasPending()

@@ -953,7 +953,7 @@ func SetDefaults(generate bool) Settings {
 				Locale:      "en",
 			},
 			FileLoading: users.FileLoading{
-				MaxConcurrent:     10,
+				MaxConcurrent:     50,
 				UploadChunkSize:   10, // 10MB
 				DownloadChunkSize: 0,  // 0MB, default to no chunking
 			},

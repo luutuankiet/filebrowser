@@ -480,7 +480,7 @@ export const mutations = {
       // Ensure fileLoading defaults are set
       if (!state.user.fileLoading) {
         state.user.fileLoading = {
-          maxConcurrentUpload: 3,
+          maxConcurrentUpload: 50,
           uploadChunkSizeMb: 5,
           downloadChunkSizeMb: 0,
           clearAll: false
@@ -488,7 +488,7 @@ export const mutations = {
       } else {
         // Ensure each property has a default if missing
         if (state.user.fileLoading.maxConcurrentUpload === undefined) {
-          state.user.fileLoading.maxConcurrentUpload = 3;
+          state.user.fileLoading.maxConcurrentUpload = 50;
         }
         if (state.user.fileLoading.uploadChunkSizeMb === undefined) {
           state.user.fileLoading.uploadChunkSizeMb = 5;

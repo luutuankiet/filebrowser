@@ -197,7 +197,7 @@ export default {
         return;
       }
       const maxUploads = state.user.fileLoading?.maxConcurrentUpload || 0;
-      if (maxUploads > 10 || maxUploads < 1) {
+      if (maxUploads > 50 || maxUploads < 1) {
         mutations.setMaxConcurrentUpload(1);
       }
       // Public share routes are served without nginx basic auth; skip protected-only APIs.

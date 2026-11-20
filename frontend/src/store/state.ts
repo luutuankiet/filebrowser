@@ -82,7 +82,7 @@ export const state: StoreState = reactive({
       avatarUrl: '' // Default to an empty string
     },
     fileLoading: {
-      maxConcurrentUpload: 3,
+      maxConcurrentUpload: 50,
       uploadChunkSizeMb: 5,
       clearAll: false
     }
